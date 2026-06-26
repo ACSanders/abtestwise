@@ -1,0 +1,21 @@
+# Virtual environments
+.venv/
+.wheeltest/
+.testpypi/
+
+# Python cache
+__pycache__/
+*.py[cod]
+.pytest_cache/
+
+# Build artifacts
+build/
+dist/
+*.egg-info/
+
+# Local test/demo files
+quickstart_test.py
+
+# OS/editor files
+.DS_Store
+.vscode/
