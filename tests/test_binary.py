@@ -7,7 +7,7 @@ import math
 import numpy as np
 import pytest
 
-from xpkit import BinaryABResult, BinaryABTest
+from abtestwise import BinaryABResult, BinaryABTest
 
 
 def build():

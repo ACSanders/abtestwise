@@ -4,8 +4,8 @@ from __future__ import annotations
 
 import numpy as np
 
-from xpkit import bayesian
-from xpkit.bayesian import (
+from abtestwise import bayesian
+from abtestwise.bayesian import (
     expected_loss_control,
     expected_loss_treatment,
     simulate_lift_samples,

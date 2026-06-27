@@ -1,4 +1,4 @@
-# xpkit
+# abtestwise
 
 A lightweight Python toolkit for **binary A/B experiment analysis** using
 aggregate count data. Version 0.1 combines frequentist and Bayesian summaries
@@ -9,7 +9,7 @@ for binary proportions.
 Install from PyPI:
 
 ```bash
-pip install xpkit
+pip install abtestwise
 ```
 
 ## Development install
@@ -23,7 +23,7 @@ pip install -e ".[dev]"
 ## Quickstart
 
 ```python
-from xpkit import BinaryABTest
+from abtestwise import BinaryABTest
 
 test = BinaryABTest.from_counts(
     control_successes=120,

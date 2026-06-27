@@ -6,7 +6,7 @@ import math
 
 from scipy.stats import norm
 
-from xpkit.frequentist import two_proportion_z_test
+from abtestwise.frequentist import two_proportion_z_test
 
 
 def test_known_case_matches_manual_calculation():

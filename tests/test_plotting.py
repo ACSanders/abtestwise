@@ -14,7 +14,7 @@ matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 from matplotlib.axes import Axes
 
-from xpkit import BinaryABTest
+from abtestwise import BinaryABTest
 
 
 def make_result():

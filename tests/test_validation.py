@@ -4,8 +4,8 @@ from __future__ import annotations
 
 import pytest
 
-from xpkit import BinaryABTest
-from xpkit.validation import validate_margin
+from abtestwise import BinaryABTest
+from abtestwise.validation import validate_margin
 
 
 def make(**overrides):
