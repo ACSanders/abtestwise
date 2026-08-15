@@ -690,7 +690,7 @@ Explicit lower-is-better support is not part of the current API.
 
 The continuous Bayesian model assumes a Normal population model for the mean and variance.
 
-This simple model may not be a good representation for metrics that are:
+This model may not be a good fit for metrics that are:
 
 * Highly skewed
 * Heavy tailed
@@ -700,7 +700,9 @@ Revenue per user is one example where this may matter.
 
 ABTestWise does not automatically test for these conditions or choose a different distribution. Users should decide whether the Normal model is appropriate for their metric and experiment.
 
-Welch's t-test is generally robust in many practical settings, especially with reasonable sample sizes, but the quality of the Bayesian Normal model still depends on the data-generating process.
+Very small continuous samples can also produce unstable mean-based Bayesian summaries. Posterior means and expected-loss estimates may be unreliable with only a few observations per arm.
+
+Welch's t-test is generally robust in many practical settings, especially with reasonable sample sizes, but the Bayesian Normal model still depends on the data being reasonably represented by that model.
 
 ## Current scope
 
@@ -768,12 +770,6 @@ Related SciPy documentation:
 
 ```text
 https://docs.scipy.org/doc/scipy/reference/generated/scipy.stats.bayes_mvs.html
-```
-
-Additional reference for the Normal mean and variance Bayesian treatment:
-
-```text
-https://www.itl.nist.gov/div898/strd/mcmc/mcmc06_cmd.html
 ```
 
 ## Development

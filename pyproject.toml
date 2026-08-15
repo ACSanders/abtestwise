@@ -5,7 +5,7 @@ build-backend = "hatchling.build"
 [project]
 name = "abtestwise"
 version = "0.3.0"
-description = "Lightweight toolkit for frequentist and Bayesian binary A/B experiment analysis."
+description = "Lightweight toolkit for frequentist and Bayesian A/B experiment analysis."
 readme = "README.md"
 requires-python = ">=3.10"
 license = { text = "MIT" }
