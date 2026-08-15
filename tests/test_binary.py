@@ -19,6 +19,7 @@ def build():
         prior_alpha=1,
         prior_beta=1,
         n_simulations=50_000,
+        confidence_level=0.95,
         credible_interval=0.95,
         seed=42,
     )
@@ -37,6 +38,73 @@ def test_observed_quantities():
     assert math.isclose(result.relative_lift, 0.025 / 0.120)
 
 
+def test_default_confidence_level():
+    test = BinaryABTest.from_counts(120, 1000, 145, 1000)
+    assert test.confidence_level == 0.95
+
+
+def test_custom_confidence_level():
+    test = BinaryABTest.from_counts(
+        120,
+        1000,
+        145,
+        1000,
+        confidence_level=0.90,
+    )
+    assert test.confidence_level == 0.90
+
+
+def test_invalid_confidence_level_rejected():
+    with pytest.raises(ValueError, match="confidence_level"):
+        BinaryABTest.from_counts(
+            120,
+            1000,
+            145,
+            1000,
+            confidence_level=1.0,
+        )
+
+
+def test_confidence_interval_contains_observed_lift():
+    result = build().run()
+    lower, upper = result.confidence_interval_bounds
+
+    assert lower < result.absolute_lift < upper
+
+
+def test_custom_confidence_level_changes_interval_width():
+    result_95 = BinaryABTest.from_counts(
+        120,
+        1000,
+        145,
+        1000,
+        confidence_level=0.95,
+        n_simulations=2000,
+        seed=1,
+    ).run()
+
+    result_90 = BinaryABTest.from_counts(
+        120,
+        1000,
+        145,
+        1000,
+        confidence_level=0.90,
+        n_simulations=2000,
+        seed=1,
+    ).run()
+
+    width_95 = (
+        result_95.confidence_interval_bounds[1]
+        - result_95.confidence_interval_bounds[0]
+    )
+    width_90 = (
+        result_90.confidence_interval_bounds[1]
+        - result_90.confidence_interval_bounds[0]
+    )
+
+    assert width_90 < width_95
+
+
 def test_lift_samples_length_matches_n_simulations():
     result = build().run()
     assert result.lift_samples.shape == (50_000,)
@@ -53,7 +121,6 @@ def test_probabilities_in_range_and_consistent():
     result = build().run()
     assert 0.0 <= result.prob_treatment_better <= 1.0
     assert 0.0 <= result.prob_control_better <= 1.0
-    # With continuous draws, ties are negligible so these nearly sum to 1.
     assert abs(
         result.prob_treatment_better + result.prob_control_better - 1.0
     ) < 1e-6
@@ -78,14 +145,41 @@ def test_summary_is_nonempty_string():
 
 def test_summary_uses_percent_and_percentage_points():
     text = build().run().summary()
-    # Rates and probabilities are shown as percents.
+
     assert "%" in text
-    assert "12.00%" in text  # control rate 120/1000
-    assert "14.50%" in text  # treatment rate 145/1000
-    # Lift quantities are shown in percentage points with a sign.
+    assert "12.00%" in text
+    assert "14.50%" in text
     assert "percentage points" in text
-    assert "+2.50 percentage points" in text  # observed lift 0.025
+    assert "+2.50 percentage points" in text
     assert "Relative lift: +20.83%" in text
+
+
+def test_summary_includes_newcombe_confidence_interval():
+    text = build().run().summary()
+
+    assert "95% Newcombe confidence interval for lift" in text
+
+
+def test_summary_includes_credible_interval():
+    text = build().run().summary()
+
+    assert "95% credible interval for lift" in text
+
+
+def test_summary_distinguishes_custom_interval_levels():
+    text = BinaryABTest.from_counts(
+        120,
+        1000,
+        145,
+        1000,
+        confidence_level=0.90,
+        credible_interval=0.95,
+        n_simulations=2000,
+        seed=1,
+    ).run().summary()
+
+    assert "90% Newcombe confidence interval for lift" in text
+    assert "95% credible interval for lift" in text
 
 
 def test_summary_renders_nan_relative_lift_gracefully():
@@ -97,21 +191,31 @@ def test_summary_renders_nan_relative_lift_gracefully():
         n_simulations=2000,
         seed=1,
     ).run().summary()
+
     assert "Relative lift: undefined" in text
-    # nan must not leak through or crash formatting.
     assert "nan" not in text.lower()
 
 
 def test_to_dict_keeps_raw_decimal_values():
     d = build().run().to_dict()
-    # to_dict stays raw: rates as decimals, not percent strings.
+
     assert d["control_rate"] == 120 / 1000
     assert isinstance(d["absolute_lift"], float)
     assert math.isclose(d["absolute_lift"], 0.025)
 
 
+def test_to_dict_includes_confidence_interval():
+    d = build().run().to_dict()
+
+    assert d["confidence_level"] == 0.95
+    assert "confidence_interval_bounds" in d
+    assert isinstance(d["confidence_interval_bounds"], tuple)
+    assert len(d["confidence_interval_bounds"]) == 2
+
+
 def test_to_dict_has_scalars_and_excludes_samples():
     d = build().run().to_dict()
+
     assert "lift_samples" not in d
     assert d["control_successes"] == 120
     assert "expected_loss_treatment" in d
@@ -126,6 +230,7 @@ def test_relative_lift_nan_when_control_rate_zero():
         n_simulations=2000,
         seed=1,
     ).run()
+
     assert math.isnan(result.relative_lift)
 
 
@@ -157,7 +262,9 @@ def test_prob_harm_above_non_increasing_in_margin():
 
 def test_no_harm_methods_reject_invalid_margin():
     result = build().run()
+
     with pytest.raises(ValueError):
         result.prob_no_harm(-0.1)
+
     with pytest.raises(ValueError):
         result.prob_harm_above(-0.1)

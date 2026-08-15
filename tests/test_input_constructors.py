@@ -12,18 +12,19 @@ TREATMENT = np.array([1, 1, 0, 1, 1, 0, 1, 1])
 
 
 def test_from_samples_matches_from_counts():
-    """Raw samples should produce the same test configuration as aggregate counts."""
     from_counts = BinaryABTest.from_counts(
         control_successes=4,
         control_total=8,
         treatment_successes=6,
         treatment_total=8,
+        confidence_level=0.90,
         seed=123,
     )
 
     from_samples = BinaryABTest.from_samples(
         control=CONTROL,
         treatment=TREATMENT,
+        confidence_level=0.90,
         seed=123,
     )
 
@@ -31,7 +32,6 @@ def test_from_samples_matches_from_counts():
 
 
 def test_from_dataframe_matches_from_samples():
-    """DataFrame input should reduce to the same underlying binary A/B test."""
     df = pd.DataFrame(
         {
             "variant": ["control"] * 8 + ["treatment"] * 8,
@@ -45,12 +45,14 @@ def test_from_dataframe_matches_from_samples():
         outcome_col="converted",
         control="control",
         treatment="treatment",
+        confidence_level=0.90,
         seed=123,
     )
 
     from_samples = BinaryABTest.from_samples(
         control=CONTROL,
         treatment=TREATMENT,
+        confidence_level=0.90,
         seed=123,
     )
 
@@ -58,7 +60,6 @@ def test_from_dataframe_matches_from_samples():
 
 
 def test_all_constructors_produce_identical_results():
-    """Equivalent inputs should produce identical frequentist and Bayesian results."""
     df = pd.DataFrame(
         {
             "variant": ["control"] * 8 + ["treatment"] * 8,
@@ -72,11 +73,13 @@ def test_all_constructors_produce_identical_results():
             8,
             6,
             8,
+            confidence_level=0.90,
             seed=123,
         ),
         BinaryABTest.from_samples(
             CONTROL,
             TREATMENT,
+            confidence_level=0.90,
             seed=123,
         ),
         BinaryABTest.from_dataframe(
@@ -85,6 +88,7 @@ def test_all_constructors_produce_identical_results():
             outcome_col="converted",
             control="control",
             treatment="treatment",
+            confidence_level=0.90,
             seed=123,
         ),
     ]
@@ -93,6 +97,11 @@ def test_all_constructors_produce_identical_results():
 
     assert results[0].z_statistic == results[1].z_statistic == results[2].z_statistic
     assert results[0].p_value == results[1].p_value == results[2].p_value
+    assert (
+        results[0].confidence_interval_bounds
+        == results[1].confidence_interval_bounds
+        == results[2].confidence_interval_bounds
+    )
     assert (
         results[0].prob_treatment_better
         == results[1].prob_treatment_better
@@ -109,8 +118,37 @@ def test_all_constructors_produce_identical_results():
     )
 
 
+def test_from_samples_propagates_confidence_level():
+    test = BinaryABTest.from_samples(
+        control=CONTROL,
+        treatment=TREATMENT,
+        confidence_level=0.90,
+    )
+
+    assert test.confidence_level == 0.90
+
+
+def test_from_dataframe_propagates_confidence_level():
+    df = pd.DataFrame(
+        {
+            "variant": ["control"] * 8 + ["treatment"] * 8,
+            "converted": np.concatenate([CONTROL, TREATMENT]),
+        }
+    )
+
+    test = BinaryABTest.from_dataframe(
+        df,
+        group_col="variant",
+        outcome_col="converted",
+        control="control",
+        treatment="treatment",
+        confidence_level=0.90,
+    )
+
+    assert test.confidence_level == 0.90
+
+
 def test_from_samples_accepts_boolean_values():
-    """Boolean observations should be accepted as binary data."""
     test = BinaryABTest.from_samples(
         control=[False, True, False, True],
         treatment=[True, True, False, True],
@@ -132,7 +170,6 @@ def test_from_samples_accepts_boolean_values():
     ],
 )
 def test_from_samples_rejects_invalid_binary_data(bad_sample):
-    """Invalid binary samples should fail clearly."""
     with pytest.raises(ValueError):
         BinaryABTest.from_samples(
             control=bad_sample,
@@ -141,7 +178,6 @@ def test_from_samples_rejects_invalid_binary_data(bad_sample):
 
 
 def test_from_dataframe_rejects_same_group_labels():
-    """Control and treatment must identify different groups."""
     df = pd.DataFrame(
         {
             "variant": ["control", "control"],
@@ -160,7 +196,6 @@ def test_from_dataframe_rejects_same_group_labels():
 
 
 def test_from_dataframe_rejects_missing_group():
-    """Requested control and treatment groups must exist."""
     df = pd.DataFrame(
         {
             "variant": ["control", "control"],
@@ -179,7 +214,6 @@ def test_from_dataframe_rejects_missing_group():
 
 
 def test_from_dataframe_ignores_unselected_groups():
-    """Rows belonging to groups outside the requested comparison should be ignored."""
     df = pd.DataFrame(
         {
             "variant": [

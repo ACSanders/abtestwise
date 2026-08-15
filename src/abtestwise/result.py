@@ -2,10 +2,9 @@
 
 from __future__ import annotations
 
+import math
 from dataclasses import dataclass, field
 from typing import Any
-
-import math
 
 import numpy as np
 
@@ -40,7 +39,6 @@ class BinaryABResult:
     Lift is always Treatment B - Control A.
     """
 
-    # Inputs
     control_successes: int
     control_total: int
     treatment_successes: int
@@ -48,18 +46,18 @@ class BinaryABResult:
     prior_alpha: float
     prior_beta: float
     n_simulations: int
+    confidence_level: float
     credible_interval: float
     seed: int | None
 
-    # Observed and frequentist results
     control_rate: float
     treatment_rate: float
     absolute_lift: float
     relative_lift: float
     z_statistic: float
     p_value: float
+    confidence_interval_bounds: tuple[float, float]
 
-    # Bayesian results
     posterior_mean_lift: float
     posterior_median_lift: float
     prob_treatment_better: float
@@ -68,7 +66,6 @@ class BinaryABResult:
     expected_loss_treatment: float
     expected_loss_control: float
 
-    # Posterior samples
     lift_samples: np.ndarray = field(repr=False)
 
     def prob_lift_above(self, threshold: float) -> float:
@@ -76,23 +73,12 @@ class BinaryABResult:
         return float(np.mean(self.lift_samples > threshold))
 
     def prob_no_harm(self, margin: float = 0.0) -> float:
-        """Posterior probability that Treatment B does no harm beyond ``margin``.
-
-        Computes ``P(lift >= -margin | data)``, where lift is
-        ``treatment_rate - control_rate``. ``margin`` is in raw decimal units, so
-        ``margin=0.005`` means "Treatment B is not worse than Control A by more
-        than 0.5 percentage points". With ``margin=0.0`` this is the probability
-        that lift is at least zero.
-        """
+        """Return P(lift >= -margin | data)."""
         validation.validate_margin(margin)
         return float(np.mean(self.lift_samples >= -margin))
 
     def prob_harm_above(self, margin: float = 0.0) -> float:
-        """Posterior probability that Treatment B is harmful beyond ``margin``.
-
-        Computes ``P(lift < -margin | data)``, the exact complement of
-        :meth:`prob_no_harm` for the same ``margin``.
-        """
+        """Return P(lift < -margin | data)."""
         validation.validate_margin(margin)
         return float(np.mean(self.lift_samples < -margin))
 
@@ -144,6 +130,7 @@ class BinaryABResult:
             "prior_alpha": self.prior_alpha,
             "prior_beta": self.prior_beta,
             "n_simulations": self.n_simulations,
+            "confidence_level": self.confidence_level,
             "credible_interval": self.credible_interval,
             "seed": self.seed,
             "control_rate": self.control_rate,
@@ -152,6 +139,7 @@ class BinaryABResult:
             "relative_lift": self.relative_lift,
             "z_statistic": self.z_statistic,
             "p_value": self.p_value,
+            "confidence_interval_bounds": self.confidence_interval_bounds,
             "posterior_mean_lift": self.posterior_mean_lift,
             "posterior_median_lift": self.posterior_median_lift,
             "prob_treatment_better": self.prob_treatment_better,
@@ -163,10 +151,12 @@ class BinaryABResult:
 
     def summary(self) -> str:
         """Return a formatted summary."""
-        ci_pct = self.credible_interval * 100
-        lower, upper = self.credible_interval_bounds
+        confidence_pct = self.confidence_level * 100
+        credible_pct = self.credible_interval * 100
 
-        # Relative lift is a ratio, not percentage points.
+        confidence_lower, confidence_upper = self.confidence_interval_bounds
+        credible_lower, credible_upper = self.credible_interval_bounds
+
         if math.isnan(self.relative_lift):
             relative_lift_str = "undefined"
         else:
@@ -187,6 +177,9 @@ class BinaryABResult:
             "Frequentist (two-sided pooled z-test)",
             f"  z statistic: {self.z_statistic:+.4f}",
             f"  p-value: {self.p_value:.4f}",
+            f"  {confidence_pct:g}% Newcombe confidence interval for lift: "
+            f"[{_format_pp(confidence_lower)}, {_format_pp(confidence_upper)}] "
+            "percentage points",
             "",
             f"Bayesian (Beta({self.prior_alpha:g}, {self.prior_beta:g}) prior, "
             f"{self.n_simulations:,} sims)",
@@ -198,12 +191,14 @@ class BinaryABResult:
             f"{_format_probability(self.prob_treatment_better)}",
             f"  P(Control A > Treatment B): "
             f"{_format_probability(self.prob_control_better)}",
-            f"  {ci_pct:g}% credible interval for lift: "
-            f"[{_format_pp(lower)}, {_format_pp(upper)}] percentage points",
+            f"  {credible_pct:g}% credible interval for lift: "
+            f"[{_format_pp(credible_lower)}, {_format_pp(credible_upper)}] "
+            "percentage points",
             "  Expected loss",
             f"    Choosing treatment B: "
             f"{self.expected_loss_treatment * 100:.2f} percentage points",
             f"    Choosing control A:   "
             f"{self.expected_loss_control * 100:.2f} percentage points",
         ]
+
         return "\n".join(lines)

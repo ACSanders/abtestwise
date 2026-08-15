@@ -43,6 +43,16 @@ def validate_prior(name: str, value: float) -> None:
         raise ValueError(f"{name} must be > 0, got {value}.")
 
 
+def validate_confidence_level(value: float) -> None:
+    """Validate a confidence level between 0 and 1."""
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        raise ValueError(f"confidence_level must be a number, got {value!r}.")
+    if not (0.0 < value < 1.0):
+        raise ValueError(
+            f"confidence_level must be strictly between 0 and 1, got {value}."
+        )
+
+
 def validate_credible_interval(value: float) -> None:
     """Validate a credible interval level between 0 and 1."""
     if isinstance(value, bool) or not isinstance(value, (int, float)):
