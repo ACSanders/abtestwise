@@ -486,7 +486,7 @@ Treatment population mean - Control population mean
 
 The same reference-prior methodology is used each time an analysis is run. ABTestWise does not store or reuse prior values from earlier analyses.
 
-SciPy documents the objective treatment of variance and standard deviation in this model using a Jeffreys prior. The underlying reference-prior setup is technically improper, but it produces a proper posterior when the model and data requirements are satisfied.
+SciPy documents the objective treatment of variance and standard deviation in this model using a Jeffreys prior. This reference-prior approach does not require users to specify numerical prior hyperparameters.
 
 ABTestWise does not run MCMC and does not require PyMC.
 
