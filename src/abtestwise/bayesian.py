@@ -1,17 +1,9 @@
-"""Bayesian analysis: beta-binomial posterior simulation.
-
-For a binary metric with a Beta prior, the posterior for each group's true
-success rate is conjugate and also Beta:
-
-posterior = Beta(prior_alpha + successes, prior_beta + failures)
-
-We draw samples from each group's posterior, form the lift distribution
-(Treatment B - Control A), and summarize it using NumPy operations.
-"""
+"""Bayesian analysis helpers for A/B testing."""
 
 from __future__ import annotations
 
 import numpy as np
+from scipy import stats
 
 
 def posterior_samples(
@@ -22,7 +14,7 @@ def posterior_samples(
     n_simulations: int,
     rng: np.random.Generator,
 ) -> np.ndarray:
-    """"Draw posterior samples of a group's true success rate from its Beta posterior."""
+    """Draw posterior samples of a binary success rate."""
     failures = total - successes
     alpha = prior_alpha + successes
     beta = prior_beta + failures
@@ -39,9 +31,14 @@ def simulate_lift_samples(
     n_simulations: int,
     rng: np.random.Generator,
 ) -> np.ndarray:
-    """Return posterior samples of the lift (treatment rate - control rate)."""
+    """Return posterior samples of binary lift: Treatment - Control."""
     control = posterior_samples(
-        control_successes, control_total, prior_alpha, prior_beta, n_simulations, rng
+        control_successes,
+        control_total,
+        prior_alpha,
+        prior_beta,
+        n_simulations,
+        rng,
     )
     treatment = posterior_samples(
         treatment_successes,
@@ -54,24 +51,44 @@ def simulate_lift_samples(
     return treatment - control
 
 
-def credible_interval_bounds(
-    lift_samples: np.ndarray, credible_interval: float
-) -> tuple[float, float]:
-    """Equal-tailed credible interval for the lift at the given level.
+def simulate_mean_difference_samples(
+    control: np.ndarray,
+    treatment: np.ndarray,
+    n_simulations: int,
+    rng: np.random.Generator,
+) -> np.ndarray:
+    """Return posterior samples of the mean difference: Treatment - Control."""
+    control_mean_distribution, _, _ = stats.mvsdist(control)
+    treatment_mean_distribution, _, _ = stats.mvsdist(treatment)
 
-    For a 0.95 interval this returns the 2.5th and 97.5th percentiles.
-    """
+    control_mean_samples = control_mean_distribution.rvs(
+        size=n_simulations,
+        random_state=rng,
+    )
+    treatment_mean_samples = treatment_mean_distribution.rvs(
+        size=n_simulations,
+        random_state=rng,
+    )
+
+    return np.asarray(treatment_mean_samples) - np.asarray(control_mean_samples)
+
+
+def credible_interval_bounds(
+    samples: np.ndarray,
+    credible_interval: float,
+) -> tuple[float, float]:
+    """Return an equal-tailed credible interval."""
     tail = (1.0 - credible_interval) / 2.0
-    lower = float(np.quantile(lift_samples, tail))
-    upper = float(np.quantile(lift_samples, 1.0 - tail))
+    lower = float(np.quantile(samples, tail))
+    upper = float(np.quantile(samples, 1.0 - tail))
     return lower, upper
 
 
-def expected_loss_treatment(lift_samples: np.ndarray) -> float:
-    """Expected loss from choosing treatment: mean(max(-lift, 0))."""
-    return float(np.mean(np.maximum(-lift_samples, 0.0)))
+def expected_loss_treatment(difference_samples: np.ndarray) -> float:
+    """Expected loss from choosing treatment."""
+    return float(np.mean(np.maximum(-difference_samples, 0.0)))
 
 
-def expected_loss_control(lift_samples: np.ndarray) -> float:
-    """Expected loss from choosing control: mean(max(lift, 0))."""
-    return float(np.mean(np.maximum(lift_samples, 0.0)))
+def expected_loss_control(difference_samples: np.ndarray) -> float:
+    """Expected loss from choosing control."""
+    return float(np.mean(np.maximum(difference_samples, 0.0)))

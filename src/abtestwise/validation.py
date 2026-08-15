@@ -113,3 +113,27 @@ def validate_binary_sample(name: str, values: object) -> np.ndarray:
         raise ValueError(f"{name} must contain only binary 0/1 values.")
 
     return numeric.astype(int)
+
+
+def validate_continuous_sample(name: str, sample: object) -> np.ndarray:
+    """Validate and return a one-dimensional continuous sample."""
+    values = np.asarray(sample)
+
+    if values.ndim != 1:
+        raise ValueError(f"{name} must be one-dimensional.")
+
+    if values.size < 2:
+        raise ValueError(f"{name} must contain at least two observations.")
+
+    if values.dtype.kind not in "iuf":
+        raise ValueError(f"{name} must contain numeric values.")
+
+    values = values.astype(float)
+
+    if not np.all(np.isfinite(values)):
+        raise ValueError(f"{name} must contain only finite values.")
+
+    if np.ptp(values) == 0.0:
+        raise ValueError(f"{name} must have non-zero variance.")
+
+    return values

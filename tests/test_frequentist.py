@@ -4,12 +4,15 @@ from __future__ import annotations
 
 import math
 
+import numpy as np
 import pytest
+from scipy import stats
 from scipy.stats import norm
 
 from abtestwise.frequentist import (
     newcombe_difference_interval,
     two_proportion_z_test,
+    welch_t_test,
     wilson_interval,
 )
 
@@ -143,3 +146,93 @@ def test_wilson_interval_rejects_invalid_confidence_level(confidence_level):
             total=100,
             confidence_level=confidence_level,
         )
+
+
+def test_welch_t_test_matches_scipy():
+    control = np.array([10.0, 11.5, 9.5, 12.0])
+    treatment = np.array([12.0, 13.5, 11.0, 14.0, 12.5])
+
+    statistic, p_value, df, interval = welch_t_test(
+        control,
+        treatment,
+        confidence_level=0.95,
+    )
+
+    expected = stats.ttest_ind(
+        treatment,
+        control,
+        equal_var=False,
+        alternative="two-sided",
+    )
+    expected_interval = expected.confidence_interval(
+        confidence_level=0.95,
+    )
+
+    assert statistic == pytest.approx(expected.statistic)
+    assert p_value == pytest.approx(expected.pvalue)
+    assert df == pytest.approx(expected.df)
+    assert interval[0] == pytest.approx(expected_interval.low)
+    assert interval[1] == pytest.approx(expected_interval.high)
+
+
+def test_welch_t_test_preserves_treatment_minus_control():
+    control = np.array([1.0, 2.0, 3.0, 4.0])
+    treatment = np.array([5.0, 6.0, 7.0, 8.0])
+
+    statistic, _, _, interval = welch_t_test(
+        control,
+        treatment,
+    )
+
+    assert statistic > 0
+    assert interval[0] > 0
+
+
+def test_welch_t_test_swapping_arms_reverses_direction():
+    control = np.array([10.0, 11.5, 9.5, 12.0])
+    treatment = np.array([12.0, 13.5, 11.0, 14.0, 12.5])
+
+    forward = welch_t_test(control, treatment)
+    reversed_ = welch_t_test(treatment, control)
+
+    assert reversed_[0] == pytest.approx(-forward[0])
+    assert reversed_[1] == pytest.approx(forward[1])
+    assert reversed_[2] == pytest.approx(forward[2])
+    assert reversed_[3][0] == pytest.approx(-forward[3][1])
+    assert reversed_[3][1] == pytest.approx(-forward[3][0])
+
+
+def test_welch_t_test_supports_unequal_sample_sizes():
+    control = np.array([10.0, 11.0, 9.5, 12.0])
+    treatment = np.array([11.0, 12.0, 13.0, 12.5, 14.0, 10.5])
+
+    statistic, p_value, df, interval = welch_t_test(
+        control,
+        treatment,
+    )
+
+    assert np.isfinite(statistic)
+    assert 0.0 <= p_value <= 1.0
+    assert df > 0.0
+    assert interval[0] < interval[1]
+
+
+def test_welch_t_test_custom_confidence_level_is_narrower():
+    control = np.array([10.0, 11.5, 9.5, 12.0])
+    treatment = np.array([12.0, 13.5, 11.0, 14.0, 12.5])
+
+    _, _, _, interval_95 = welch_t_test(
+        control,
+        treatment,
+        confidence_level=0.95,
+    )
+    _, _, _, interval_90 = welch_t_test(
+        control,
+        treatment,
+        confidence_level=0.90,
+    )
+
+    width_95 = interval_95[1] - interval_95[0]
+    width_90 = interval_90[1] - interval_90[0]
+
+    assert width_90 < width_95

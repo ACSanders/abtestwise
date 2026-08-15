@@ -1,4 +1,4 @@
-"""Result object for binary A/B tests."""
+"""Result objects for A/B tests."""
 
 from __future__ import annotations
 
@@ -30,6 +30,20 @@ def _format_probability(x: float, digits: int = 1) -> str:
     if x is None or (isinstance(x, float) and math.isnan(x)):
         return "undefined"
     return f"{x * 100:.{digits}f}%"
+
+
+def _format_number(x: float, digits: int = 4) -> str:
+    """Format a continuous quantity."""
+    if x is None or (isinstance(x, float) and math.isnan(x)):
+        return "undefined"
+    return f"{x:.{digits}f}"
+
+
+def _format_signed_number(x: float, digits: int = 4) -> str:
+    """Format a signed continuous quantity."""
+    if x is None or (isinstance(x, float) and math.isnan(x)):
+        return "undefined"
+    return f"{x:+.{digits}f}"
 
 
 @dataclass(frozen=True)
@@ -199,6 +213,166 @@ class BinaryABResult:
             f"{self.expected_loss_treatment * 100:.2f} percentage points",
             f"    Choosing control A:   "
             f"{self.expected_loss_control * 100:.2f} percentage points",
+        ]
+
+        return "\n".join(lines)
+
+
+@dataclass(frozen=True)
+class ContinuousABResult:
+    """Results from a continuous A/B test.
+
+    Differences are always Treatment B - Control A.
+    """
+
+    n_simulations: int
+    confidence_level: float
+    credible_interval: float
+    seed: int | None
+
+    control_n: int
+    treatment_n: int
+    control_mean: float
+    treatment_mean: float
+    mean_difference: float
+
+    t_statistic: float
+    p_value: float
+    degrees_of_freedom: float
+    confidence_interval_bounds: tuple[float, float]
+
+    posterior_mean_difference: float
+    posterior_median_difference: float
+    prob_treatment_better: float
+    prob_control_better: float
+    credible_interval_bounds: tuple[float, float]
+    expected_loss_treatment: float
+    expected_loss_control: float
+
+    mean_difference_samples: np.ndarray = field(repr=False)
+
+    def prob_difference_above(self, threshold: float) -> float:
+        """Return the posterior probability that the difference exceeds a threshold."""
+        return float(np.mean(self.mean_difference_samples > threshold))
+
+    def prob_no_harm(self, margin: float = 0.0) -> float:
+        """Return P(mean difference >= -margin | data)."""
+        validation.validate_margin(margin)
+        return float(np.mean(self.mean_difference_samples >= -margin))
+
+    def prob_harm_above(self, margin: float = 0.0) -> float:
+        """Return P(mean difference < -margin | data)."""
+        validation.validate_margin(margin)
+        return float(np.mean(self.mean_difference_samples < -margin))
+
+    def plot_difference_distribution(
+        self,
+        ax: Any = None,
+        *,
+        bins: int = 50,
+        density: bool = True,
+        title: str | None = "Posterior Distribution of Mean Difference",
+    ) -> Any:
+        """Plot the posterior mean-difference distribution."""
+        from . import plotting
+
+        return plotting.plot_mean_difference_distribution(
+            self.mean_difference_samples,
+            self.posterior_median_difference,
+            self.credible_interval_bounds,
+            self.credible_interval,
+            ax=ax,
+            bins=bins,
+            density=density,
+            title=title,
+        )
+
+    def plot_probability_bar(
+        self,
+        ax: Any = None,
+        *,
+        title: str | None = "Posterior Probability of Being Better",
+    ) -> Any:
+        """Plot the probability that each group is better."""
+        from . import plotting
+
+        return plotting.plot_probability_bar(
+            self.prob_treatment_better,
+            self.prob_control_better,
+            ax=ax,
+            title=title,
+        )
+
+    def to_dict(self) -> dict[str, Any]:
+        """Return result fields as a dictionary."""
+        return {
+            "n_simulations": self.n_simulations,
+            "confidence_level": self.confidence_level,
+            "credible_interval": self.credible_interval,
+            "seed": self.seed,
+            "control_n": self.control_n,
+            "treatment_n": self.treatment_n,
+            "control_mean": self.control_mean,
+            "treatment_mean": self.treatment_mean,
+            "mean_difference": self.mean_difference,
+            "t_statistic": self.t_statistic,
+            "p_value": self.p_value,
+            "degrees_of_freedom": self.degrees_of_freedom,
+            "confidence_interval_bounds": self.confidence_interval_bounds,
+            "posterior_mean_difference": self.posterior_mean_difference,
+            "posterior_median_difference": self.posterior_median_difference,
+            "prob_treatment_better": self.prob_treatment_better,
+            "prob_control_better": self.prob_control_better,
+            "credible_interval_bounds": self.credible_interval_bounds,
+            "expected_loss_treatment": self.expected_loss_treatment,
+            "expected_loss_control": self.expected_loss_control,
+        }
+
+    def summary(self) -> str:
+        """Return a formatted summary."""
+        confidence_pct = self.confidence_level * 100
+        credible_pct = self.credible_interval * 100
+
+        confidence_lower, confidence_upper = self.confidence_interval_bounds
+        credible_lower, credible_upper = self.credible_interval_bounds
+
+        lines = [
+            "Continuous A/B test result",
+            "=" * 40,
+            "Observed (difference is always Treatment B - Control A)",
+            f"  Control (A):   n={self.control_n:,}, "
+            f"mean={_format_number(self.control_mean)}",
+            f"  Treatment (B): n={self.treatment_n:,}, "
+            f"mean={_format_number(self.treatment_mean)}",
+            f"  Observed mean difference (B - A): "
+            f"{_format_signed_number(self.mean_difference)}",
+            "",
+            "Frequentist (two-sided Welch t-test)",
+            f"  t statistic: {self.t_statistic:+.4f}",
+            f"  degrees of freedom: {self.degrees_of_freedom:.4f}",
+            f"  p-value: {self.p_value:.4f}",
+            f"  {confidence_pct:g}% confidence interval for mean difference: "
+            f"[{_format_signed_number(confidence_lower)}, "
+            f"{_format_signed_number(confidence_upper)}]",
+            "",
+            f"Bayesian (Normal mean/variance reference-prior model, "
+            f"{self.n_simulations:,} sims)",
+            f"  Posterior mean difference: "
+            f"{_format_signed_number(self.posterior_mean_difference)}",
+            f"  Posterior median difference: "
+            f"{_format_signed_number(self.posterior_median_difference)}",
+            f"  P(Treatment B > Control A): "
+            f"{_format_probability(self.prob_treatment_better)}",
+            f"  P(Control A > Treatment B): "
+            f"{_format_probability(self.prob_control_better)}",
+            f"  {credible_pct:g}% credible interval for mean difference: "
+            f"[{_format_signed_number(credible_lower)}, "
+            f"{_format_signed_number(credible_upper)}]",
+            "  Expected loss",
+            f"    Choosing treatment B: "
+            f"{_format_number(self.expected_loss_treatment)}",
+            f"    Choosing control A:   "
+            f"{_format_number(self.expected_loss_control)}",
         ]
 
         return "\n".join(lines)

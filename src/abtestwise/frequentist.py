@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import math
 
+import numpy as np
+from scipy import stats
 from scipy.stats import norm
 
 
@@ -108,4 +110,29 @@ def newcombe_difference_interval(
     return (
         float(difference - lower_distance),
         float(difference + upper_distance),
+    )
+
+
+def welch_t_test(
+    control: np.ndarray,
+    treatment: np.ndarray,
+    confidence_level: float = 0.95,
+) -> tuple[float, float, float, tuple[float, float]]:
+    """Run a two-sided Welch t-test for Treatment - Control."""
+    result = stats.ttest_ind(
+        treatment,
+        control,
+        equal_var=False,
+        alternative="two-sided",
+    )
+
+    interval = result.confidence_interval(
+        confidence_level=confidence_level,
+    )
+
+    return (
+        float(result.statistic),
+        float(result.pvalue),
+        float(result.df),
+        (float(interval.low), float(interval.high)),
     )
