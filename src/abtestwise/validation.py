@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import math
 
+import numpy as np
 
 def validate_count(name: str, value: int) -> None:
     """Validate a non-negative integer count."""
@@ -78,3 +79,27 @@ def validate_margin(value: float) -> None:
         raise ValueError(f"margin must be finite, got {value}.")
     if value < 0:
         raise ValueError(f"margin must be >= 0, got {value}.")
+
+
+def validate_binary_sample(name: str, values: object) -> np.ndarray:
+    """Validate and return a one-dimensional binary sample."""
+    array = np.asarray(values)
+
+    if array.ndim != 1:
+        raise ValueError(f"{name} must be one-dimensional.")
+
+    if array.size == 0:
+        raise ValueError(f"{name} must contain at least one observation.")
+
+    try:
+        numeric = array.astype(float)
+    except (TypeError, ValueError) as exc:
+        raise ValueError(f"{name} must contain only binary 0/1 values.") from exc
+
+    if not np.all(np.isfinite(numeric)):
+        raise ValueError(f"{name} cannot contain missing or infinite values.")
+
+    if not np.all((numeric == 0) | (numeric == 1)):
+        raise ValueError(f"{name} must contain only binary 0/1 values.")
+
+    return numeric.astype(int)

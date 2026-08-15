@@ -1,4 +1,4 @@
-"""Run binary A/B tests from aggregate count data.
+"""Run binary A/B tests from counts, raw samples, or DataFrame-like data.
 
 This module validates inputs, sets up the random number generator so results are
 reproducible from a seed, and combines the frequentist and Bayesian helpers to
@@ -18,7 +18,7 @@ from .result import BinaryABResult
 
 @dataclass(frozen=True)
 class BinaryABTest:
-    """A binary A/B test using aggregate success and total counts."""
+    """A binary A/B test with frequentist and Bayesian analysis."""
 
     control_successes: int
     control_total: int
@@ -75,6 +75,101 @@ class BinaryABTest:
             treatment_total=treatment_total,
             prior_alpha=float(prior_alpha),
             prior_beta=float(prior_beta),
+            n_simulations=n_simulations,
+            credible_interval=credible_interval,
+            seed=seed,
+        )
+
+    @classmethod
+    def from_samples(
+        cls,
+        control: object,
+        treatment: object,
+        *,
+        prior_alpha: float = 1.0,
+        prior_beta: float = 1.0,
+        n_simulations: int = 100_000,
+        credible_interval: float = 0.95,
+        seed: int | None = None,
+    ) -> "BinaryABTest":
+        """Create a binary A/B test from raw control and treatment samples.
+
+        Each sample must be one-dimensional and contain only binary 0/1 values.
+        NumPy arrays, Python sequences, and pandas Series are supported.
+        """
+        control_values = validation.validate_binary_sample("control", control)
+        treatment_values = validation.validate_binary_sample("treatment", treatment)
+
+        return cls.from_counts(
+            control_successes=int(control_values.sum()),
+            control_total=int(control_values.size),
+            treatment_successes=int(treatment_values.sum()),
+            treatment_total=int(treatment_values.size),
+            prior_alpha=prior_alpha,
+            prior_beta=prior_beta,
+            n_simulations=n_simulations,
+            credible_interval=credible_interval,
+            seed=seed,
+        )
+
+    @classmethod
+    def from_dataframe(
+        cls,
+        data: object,
+        *,
+        group_col: str,
+        outcome_col: str,
+        control: object,
+        treatment: object,
+        prior_alpha: float = 1.0,
+        prior_beta: float = 1.0,
+        n_simulations: int = 100_000,
+        credible_interval: float = 0.95,
+        seed: int | None = None,
+    ) -> "BinaryABTest":
+        """Create a binary A/B test from a DataFrame-like object.
+
+        Rows are selected from ``group_col`` using the supplied control and
+        treatment labels. ``outcome_col`` must contain binary 0/1 outcomes for
+        the selected rows.
+
+        This method does not require pandas as a package dependency. It only
+        requires that ``data`` supports column access such as
+        ``data[group_col]``.
+        """
+        if control == treatment:
+            raise ValueError("control and treatment must identify different groups.")
+
+        try:
+            groups = np.asarray(data[group_col])
+            outcomes = np.asarray(data[outcome_col])
+        except (KeyError, TypeError, IndexError) as exc:
+            raise ValueError(
+                "data must provide the requested group_col and outcome_col."
+            ) from exc
+
+        if groups.ndim != 1 or outcomes.ndim != 1:
+            raise ValueError("group_col and outcome_col must each be one-dimensional.")
+
+        if groups.size != outcomes.size:
+            raise ValueError("group_col and outcome_col must have the same length.")
+
+        control_mask = groups == control
+        treatment_mask = groups == treatment
+
+        if not np.any(control_mask):
+            raise ValueError(f"control group {control!r} was not found in group_col.")
+
+        if not np.any(treatment_mask):
+            raise ValueError(
+                f"treatment group {treatment!r} was not found in group_col."
+            )
+
+        return cls.from_samples(
+            control=outcomes[control_mask],
+            treatment=outcomes[treatment_mask],
+            prior_alpha=prior_alpha,
+            prior_beta=prior_beta,
             n_simulations=n_simulations,
             credible_interval=credible_interval,
             seed=seed,
